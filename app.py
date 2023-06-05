@@ -44,41 +44,52 @@ class Mahasiswa(db.Model):
 
 # ROUTES
 # retrieve details of all courses
-@app.get("/allcourses")
+@app.get("/courses")
 def get_courses():
     res = [
         {"kode": matkul.kode_mk, "mata_kuliah": matkul.nama_mk, "sks": matkul.sks}
         for matkul in Mata_Kuliah.query.all()
     ]
-    return jsonify({"result": res})
+    return jsonify(res)
 
 
 # retrieve a specific course details
 @app.get("/course/<code>")
 def get_course(code):
-    matkul = Mata_Kuliah.query.filter_by(kode_mk=code).first_or_404()
-    res = {"kode": matkul.kode_mk, "mata_kuliah": matkul.nama_mk, "sks": matkul.sks}
-    return jsonify({"result": res})
+    course = Mata_Kuliah.query.filter_by(kode_mk=code).first()
+    if not course:
+        return {"message": "Course not found"},404
+    res = {"kode": course.kode_mk, "mata_kuliah": course.nama_mk, "sks": course.sks}
+    return jsonify(res)
 
 
 # add a new course
-@app.post("/addcourse")
+@app.post("/course")
 def add_course():
     data = request.get_json()
-    if not "kode" in data or not "nama" in data or not "sks" in data:
-        return jsonify({"error": "Bad Request"}), 400
-    kode = request.json["kode"]
-    nama = request.json["nama"]
-    sks = request.json["sks"]
-    m = Mata_Kuliah(kode_mk=kode, nama_mk=nama, sks=sks)
-    db.session.add(m)
+    if any([not "kode" in data, not "nama" in data, not "sks" in data]):
+        return {"error": "Bad Request: Missing field(s)"}, 400
+
+    if Mata_Kuliah.query.filter_by(kode_mk=data["kode"]).first():
+        return {"error": "Course already exists"}, 400
+
+    new_course = Mata_Kuliah(
+        kode_mk=data["kode"], nama_mk=data["nama"], sks=data["sks"]
+    )
+    db.session.add(new_course)
     db.session.commit()
-    return jsonify({"message": "Course added"}), 201
+    return {"message": "Course added"}, 201
 
 
 # delete a course
-# @app.delete("/delcourse/<code>")
-# def delete_course(code):
+@app.delete("/course/<code>")
+def delete_course(code):
+    course = Mata_Kuliah.query.filter_by(kode_mk=code).first()
+    if not course:
+        return {"message": "Course not found"}, 404
+    db.session.delete(course)
+    db.session.commit()
+    return {"message": "Course deleted"}
 
 
 # retrieve details of all students
@@ -94,7 +105,7 @@ def get_students():
         }
         for mahasiswa in Mahasiswa.query.all()
     ]
-    return jsonify({"result": res})
+    return jsonify(res)
 
 
 if __name__ == "__main__":
