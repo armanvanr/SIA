@@ -44,7 +44,7 @@ class Mahasiswa(db.Model):
 
 # ROUTES
 # retrieve details of all courses
-@app.get("/courses")
+@app.get("/allcourses")
 def get_courses():
     res = [
         {"kode": matkul.kode_mk, "mata_kuliah": matkul.nama_mk, "sks": matkul.sks}
@@ -54,7 +54,7 @@ def get_courses():
 
 
 # retrieve a specific course details
-@app.get("/courses/<code>")
+@app.get("/course/<code>")
 def get_course(code):
     matkul = Mata_Kuliah.query.filter_by(kode_mk=code).first_or_404()
     res = {"kode": matkul.kode_mk, "mata_kuliah": matkul.nama_mk, "sks": matkul.sks}
@@ -62,8 +62,11 @@ def get_course(code):
 
 
 # add a new course
-@app.post("/courses")
+@app.post("/addcourse")
 def add_course():
+    data = request.get_json()
+    if not "kode" in data or not "nama" in data or not "sks" in data:
+        return jsonify({"error": "Bad Request"}), 400
     kode = request.json["kode"]
     nama = request.json["nama"]
     sks = request.json["sks"]
@@ -71,6 +74,11 @@ def add_course():
     db.session.add(m)
     db.session.commit()
     return jsonify({"message": "Course added"}), 201
+
+
+# delete a course
+# @app.delete("/delcourse/<code>")
+# def delete_course(code):
 
 
 # retrieve details of all students
