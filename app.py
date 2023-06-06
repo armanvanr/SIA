@@ -155,6 +155,20 @@ def get_students():
     ]
     return jsonify(res)
 
+# retrieve all lecturers
+@app.get("/lecturers")
+def get_lecturers():
+    res = [
+        {
+            "nip": dosen.nip,
+            "nama": dosen.nama_dosen,
+            "jenis_kelamin": dosen.gender_dosen,
+            "nomor_telepon": dosen.telp_dosen,
+            "email": dosen.email_dosen,
+        }
+        for dosen in Dosen.query.all()
+    ]
+    return jsonify(res)
 
 if __name__ == "__main__":
     app.run(debug=True)
