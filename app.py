@@ -60,7 +60,9 @@ class Dosen(db.Model):
 # create table Kelas
 class Kelas(db.Model):
     __tablename__ = "kelas"
-    kode_kelas = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
+    kode_kelas = db.Column(
+        db.Integer, primary_key=True, nullable=False, autoincrement=True
+    )
     nama_kelas = db.Column(db.String, nullable=False)
     nip = db.Column(db.String, db.ForeignKey("dosen.nip"), nullable=False)
     kode_mk = db.Column(db.String, db.ForeignKey("mata_kuliah.kode_mk"), nullable=False)
@@ -69,6 +71,7 @@ class Kelas(db.Model):
 
     def __repr__(self):
         return f"<Kelas {self.kode_kelas}>"
+
 
 # ROUTES
 # Mata_Kuliah/Courses
@@ -80,6 +83,7 @@ def get_courses():
         for matkul in Mata_Kuliah.query.all()
     ]
     return jsonify(res)
+
 
 # retrieve a specific course details or delete a course
 @app.route("/course/<code>", methods=["GET", "DELETE"])
@@ -100,6 +104,7 @@ def get_delete_course(code):
         db.session.delete(course)
         db.session.commit()
         return {"message": "Course deleted"}
+
 
 # add a new course or delete an existing course
 @app.route("/course", methods=["POST", "PUT"])
@@ -140,6 +145,7 @@ def add_update_course():
         db.session.commit()
         return {"message": "Course updated"}
 
+
 # Mahasiswa/Students
 # retrieve details of all students
 @app.get("/students")
@@ -155,6 +161,7 @@ def get_students():
         for mahasiswa in Mahasiswa.query.all()
     ]
     return jsonify(res)
+
 
 # Dosen/Lecturers
 # retrieve all lecturers
@@ -172,6 +179,7 @@ def get_lecturers():
     ]
     return jsonify(res)
 
+
 # Kelas/Schedules
 # retrieve all available schedules
 @app.get("/schedules")
@@ -183,11 +191,68 @@ def get_schedules():
             "dosen": kelas.nip,
             "mata_kuliah": kelas.kode_mk,
             "hari": kelas.hari,
-            "waktu": kelas.jam.strftime('%H:%M:%S')
+            "jam": kelas.jam.strftime("%H:%M:%S"),
         }
         for kelas in Kelas.query.all()
     ]
     return jsonify(res)
+
+
+# create a new schedule or update an existing schedule
+@app.route("/schedule", methods=["POST", "PUT"])
+def create_delete_schedule():
+    data = request.get_json()
+
+    # create a new schedule
+    if request.method == "POST":
+        if any(
+            [
+                not "ruang" in data,
+                not "dosen" in data,
+                not "mata_kuliah" in data,
+                not "hari" in data,
+                not "jam" in data,
+            ]
+        ):
+            return {"error": "Bad Request: Missing field(s)"}, 400
+
+        # check if time and place occupied
+        exist_schedule = Kelas.query.filter_by(hari=data["hari"], jam=data["jam"], nama_kelas=data["ruang"]).first()
+        if exist_schedule:
+            return {"error": "Bad Request: Time and place already occupied"}, 400
+
+        new_schedule = Kelas(
+            nama_kelas=data["ruang"],
+            nip=data["dosen"],
+            kode_mk=data["mata_kuliah"],
+            hari=data["hari"],
+            jam=data["jam"],
+        )
+        db.session.add(new_schedule)
+        db.session.commit()
+        return {"message": "Schedule created"}, 201
+    
+    # update an existing schedule
+    elif request.method == "PUT":
+        schedule = Kelas.query.get(data["kode_kelas"])
+
+        # check if a schedule exists
+        if not schedule:
+            return {"message": "Schedule not found"}, 404
+
+        # check if time and place occupied
+        exist_schedule = Kelas.query.filter_by(hari=data["hari"], jam=data["jam"], nama_kelas=data["ruang"]).first()
+        if exist_schedule:
+            return {"error": "Bad Request: Time and place already occupied"}, 400
+
+        # override the existing data with the new ones, with current data as default values
+        schedule.nip = data.get("dosen", schedule.nip)
+        schedule.kode_mk = data.get("mata_kuliah", schedule.kode_mk)
+        schedule.hari = data.get("hari", schedule.hari)
+        schedule.jam = data.get("jam", schedule.jam)
+        db.session.commit()
+        return {"message": "Schedule updated"}
+
 
 if __name__ == "__main__":
     app.run(debug=True)
