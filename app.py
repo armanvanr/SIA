@@ -24,6 +24,7 @@ class Mata_Kuliah(db.Model):
     kode_mk = db.Column(db.String, primary_key=True, nullable=False, unique=True)
     nama_mk = db.Column(db.String, nullable=False)
     sks = db.Column(db.Integer, nullable=False)
+    # list_kelas = db.relationship("kelas")
 
     def __repr__(self):
         return f"Matkul <{self.nama_mk}>"
@@ -50,6 +51,7 @@ class Dosen(db.Model):
     gender_dosen = db.Column(db.String, nullable=False)
     telp_dosen = db.Column(db.String, nullable=False, unique=True)
     email_dosen = db.Column(db.String, nullable=False, unique=True)
+    # list_kelas = db.relationship("kelas")
 
     def __repr__(self):
         return f"<Matkul {self.nama_dosen}>"
@@ -58,18 +60,18 @@ class Dosen(db.Model):
 # create table Kelas
 class Kelas(db.Model):
     __tablename__ = "kelas"
-    kode_kelas = db.Column(db.Integer, primary_key=True, nullable=False)
+    kode_kelas = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
     nama_kelas = db.Column(db.String, nullable=False)
-    nip = db.Column(db.String, nullable=False)
+    nip = db.Column(db.String, db.ForeignKey("dosen.nip"), nullable=False)
     kode_mk = db.Column(db.String, db.ForeignKey("mata_kuliah.kode_mk"), nullable=False)
-    jam = db.Column(db.Time, nullable=False)
     hari = db.Column(db.String, nullable=False)
+    jam = db.Column(db.Time, nullable=False)
 
     def __repr__(self):
         return f"<Kelas {self.kode_kelas}>"
 
-
 # ROUTES
+# Mata_Kuliah/Courses
 # retrieve details of all courses
 @app.get("/courses")
 def get_courses():
@@ -78,7 +80,6 @@ def get_courses():
         for matkul in Mata_Kuliah.query.all()
     ]
     return jsonify(res)
-
 
 # retrieve a specific course details or delete a course
 @app.route("/course/<code>", methods=["GET", "DELETE"])
@@ -100,7 +101,7 @@ def get_delete_course(code):
         db.session.commit()
         return {"message": "Course deleted"}
 
-
+# add a new course or delete an existing course
 @app.route("/course", methods=["POST", "PUT"])
 def add_update_course():
     data = request.get_json()
@@ -139,7 +140,7 @@ def add_update_course():
         db.session.commit()
         return {"message": "Course updated"}
 
-
+# Mahasiswa/Students
 # retrieve details of all students
 @app.get("/students")
 def get_students():
@@ -155,6 +156,7 @@ def get_students():
     ]
     return jsonify(res)
 
+# Dosen/Lecturers
 # retrieve all lecturers
 @app.get("/lecturers")
 def get_lecturers():
@@ -167,6 +169,23 @@ def get_lecturers():
             "email": dosen.email_dosen,
         }
         for dosen in Dosen.query.all()
+    ]
+    return jsonify(res)
+
+# Kelas/Schedules
+# retrieve all available schedules
+@app.get("/schedules")
+def get_schedules():
+    res = [
+        {
+            "kode_kelas": kelas.kode_kelas,
+            "ruang": kelas.nama_kelas,
+            "dosen": kelas.nip,
+            "mata_kuliah": kelas.kode_mk,
+            "hari": kelas.hari,
+            "waktu": kelas.jam.strftime('%H:%M:%S')
+        }
+        for kelas in Kelas.query.all()
     ]
     return jsonify(res)
 
