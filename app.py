@@ -84,49 +84,60 @@ def get_courses():
 @app.route("/course/<code>", methods=["GET", "DELETE"])
 def get_delete_course(code):
     course = Mata_Kuliah.query.filter_by(kode_mk=code).first()
+
+    # check if a specific course exists
     if not course:
         return {"message": "Course not found"}, 404
 
+    # retrieve that specific course
     if request.method == "GET":
         res = {"kode": course.kode_mk, "mata_kuliah": course.nama_mk, "sks": course.sks}
         return jsonify(res)
+
+    # delete that specific course
     elif request.method == "DELETE":
         db.session.delete(course)
         db.session.commit()
         return {"message": "Course deleted"}
 
 
-# add a new course
-@app.post("/course")
-def add_course():
+@app.route("/course", methods=["POST", "PUT"])
+def add_update_course():
     data = request.get_json()
-    if any([not "kode" in data, not "nama" in data, not "sks" in data]):
-        return {"error": "Bad Request: Missing field(s)"}, 400
 
-    course = Mata_Kuliah.query.filter_by(kode_mk=data["kode"]).first()
-    if course:
-        return {"error": "Course already exists"}, 400
+    # add a new course
+    if request.method == "POST":
+        # check the field data
+        if any([not "kode" in data, not "nama" in data, not "sks" in data]):
+            return {"error": "Bad Request: Missing field(s)"}, 400
 
-    new_course = Mata_Kuliah(
-        kode_mk=data["kode"], nama_mk=data["nama"], sks=data["sks"]
-    )
-    db.session.add(new_course)
-    db.session.commit()
-    return {"message": "Course added"}, 201
+        # check if a course already exists
+        course = Mata_Kuliah.query.filter_by(kode_mk=data["kode"]).first()
+        if course:
+            return {"error": "Course already exists"}, 400
 
+        # create a new instance of Mata Kuliah
+        new_course = Mata_Kuliah(
+            kode_mk=data["kode"], nama_mk=data["nama"], sks=data["sks"]
+        )
+        db.session.add(new_course)
+        db.session.commit()
+        return {"message": "Course added"}, 201
 
-# update a course
-@app.put("/course")
-def update_course():
-    data = request.get_json()
-    course = Mata_Kuliah.query.get(data["kode"])
-    if not course:
-        return {"message": "Course not found"}, 404
-    course.kode_mk = data.get("kode", course.kode_mk)
-    course.nama_mk = data.get("nama", course.nama_mk)
-    course.sks = data.get("sks", course.sks)
-    db.session.commit()
-    return {"message": "Course updated"}
+    # update an existing course
+    elif request.method == "PUT":
+        course = Mata_Kuliah.query.get(data["kode"])
+
+        # check if a course exists
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        # override the existing data with the new ones, with current data as default values
+        course.kode_mk = data.get("kode", course.kode_mk)
+        course.nama_mk = data.get("nama", course.nama_mk)
+        course.sks = data.get("sks", course.sks)
+        db.session.commit()
+        return {"message": "Course updated"}
 
 
 # retrieve details of all students
