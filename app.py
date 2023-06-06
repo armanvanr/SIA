@@ -39,7 +39,34 @@ class Mahasiswa(db.Model):
     email_mhs = db.Column(db.String, nullable=False, unique=True)
 
     def __repr__(self):
-        return f"<Matkul {self.nama_mk}>"
+        return f"<Matkul {self.nama_mhs}>"
+
+
+# create table Dosen
+class Dosen(db.Model):
+    __tablename__ = "dosen"
+    nip = db.Column(db.String, primary_key=True, nullable=False, unique=True)
+    nama_dosen = db.Column(db.String, nullable=False)
+    gender_dosen = db.Column(db.String, nullable=False)
+    telp_dosen = db.Column(db.String, nullable=False, unique=True)
+    email_dosen = db.Column(db.String, nullable=False, unique=True)
+
+    def __repr__(self):
+        return f"<Matkul {self.nama_dosen}>"
+
+
+# create table Kelas
+class Kelas(db.Model):
+    __tablename__ = "kelas"
+    kode_kelas = db.Column(db.Integer, primary_key=True, nullable=False)
+    nama_kelas = db.Column(db.String, nullable=False)
+    nip = db.Column(db.String, nullable=False)
+    kode_mk = db.Column(db.String, db.ForeignKey("mata_kuliah.kode_mk"), nullable=False)
+    jam = db.Column(db.Time, nullable=False)
+    hari = db.Column(db.String, nullable=False)
+
+    def __repr__(self):
+        return f"<Kelas {self.kode_kelas}>"
 
 
 # ROUTES
@@ -53,14 +80,20 @@ def get_courses():
     return jsonify(res)
 
 
-# retrieve a specific course details
-@app.get("/course/<code>")
-def get_course(code):
+# retrieve a specific course details or delete a course
+@app.route("/course/<code>", methods=["GET", "DELETE"])
+def get_delete_course(code):
     course = Mata_Kuliah.query.filter_by(kode_mk=code).first()
     if not course:
         return {"message": "Course not found"}, 404
-    res = {"kode": course.kode_mk, "mata_kuliah": course.nama_mk, "sks": course.sks}
-    return jsonify(res)
+
+    if request.method == "GET":
+        res = {"kode": course.kode_mk, "mata_kuliah": course.nama_mk, "sks": course.sks}
+        return jsonify(res)
+    elif request.method == "DELETE":
+        db.session.delete(course)
+        db.session.commit()
+        return {"message": "Course deleted"}
 
 
 # add a new course
@@ -94,17 +127,6 @@ def update_course():
     course.sks = data.get("sks", course.sks)
     db.session.commit()
     return {"message": "Course updated"}
-
-
-# delete a course
-@app.delete("/course/<code>")
-def delete_course(code):
-    course = Mata_Kuliah.query.filter_by(kode_mk=code).first()
-    if not course:
-        return {"message": "Course not found"}, 404
-    db.session.delete(course)
-    db.session.commit()
-    return {"message": "Course deleted"}
 
 
 # retrieve details of all students
