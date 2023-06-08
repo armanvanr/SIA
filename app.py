@@ -28,7 +28,7 @@ class Mata_Kuliah(db.Model):
     kode_mk = db.Column(db.String, primary_key=True, nullable=False, unique=True)
     nama_mk = db.Column(db.String, nullable=False)
     sks = db.Column(db.Integer, nullable=False)
-    # list_kelas = db.relationship("kelas", backref="mata_kuliah", lazy=True)
+    list_kelas = db.relationship("Kelas", backref="mata_kuliah", lazy="dynamic")
 
     def __repr__(self):
         return f"Matkul <{self.nama_mk}>"
@@ -55,7 +55,7 @@ class Dosen(db.Model):
     gender_dosen = db.Column(db.String, nullable=False)
     telp_dosen = db.Column(db.String, nullable=False, unique=True)
     email_dosen = db.Column(db.String, nullable=False, unique=True)
-    # list_kelas = db.relationship("kelas", backref="dosen", lazy=True)
+    list_kelas = db.relationship("Kelas", backref="dosen", lazy="dynamic")
 
     def __repr__(self):
         return f"<Matkul {self.nama_dosen}>"
@@ -89,6 +89,7 @@ class Kelas_Ampu(db.Model):
 
     def __repr__(self):
         return f"<Kelas Ampu {self.kode_kelas}>"
+
 
 # AUTH
 def login():
@@ -206,9 +207,11 @@ def get_delete_student(code):
         # retrieve that specific student
         if request.method == "GET":
             res = {
-                "kode": student.nim,
-                "mata_kuliah": student.nama_mk,
-                "sks": student.sks,
+                "nim": student.nim,
+                "nama": student.nama_mhs,
+                "jenis_kelamin": student.gender_mhs,
+                "nomor_telepon": student.telp_mhs,
+                "email": student.email_mhs,
             }
             return jsonify(res)
 
@@ -228,37 +231,66 @@ def add_update_student():
 
         # add a new student
         if request.method == "POST":
-            # check the field data
-            if any([not "kode" in data, not "nama" in data, not "sks" in data]):
+            # check if any data field is empty
+            if any(
+                [
+                    not "nim" in data,
+                    not "nama" in data,
+                    not "jenis_kelamin" in data,
+                    not "nomor_telepon" in data,
+                    not "email" in data,
+                ]
+            ):
                 return {"error": "Bad Request: Missing field(s)"}, 400
 
             # check if a student already exists
-            student = Mahasiswa.query.filter_by(nim=data["kode"]).first()
-            if student:
-                return {"error": "Student already exists"}, 400
+            res1 = Mahasiswa.query.filter_by(nim=data["nim"]).first()
+            if res1:
+                return {"error": f"Student with nim {res1.nim} already exists"}, 400
+
+            # check unique phone number
+            res2 = Mahasiswa.query.filter_by(telp_mhs=data["nomor_telepon"]).first()
+            if res2:
+                return {"error": f"Student with telp {res2.telp_mhs} already exists"}, 400
+
+            # check unique email
+            res3 = Mahasiswa.query.filter_by(email_mhs=data["email"]).first()
+            if res3:
+                return {"error": f"Student with email {res3.email_mhs} already exists"}, 400
+
+            # check gender
+            if data["jenis_kelamin"] not in ("L", "P"):
+                return {"error": "Invalid gender type"}, 400
 
             # create a new instance of Mata Kuliah
             new_student = Mahasiswa(
-                nim=data["kode"], nama_mk=data["nama"], sks=data["sks"]
+                nim=data["nim"],
+                nama_mhs=data["nama"],
+                gender_mhs=data["jenis_kelamin"],
+                telp_mhs=data["nomor_telepon"],
+                email_mhs=data["email"],
             )
             db.session.add(new_student)
             db.session.commit()
-            return {"message": "Student added"}, 201
+            return {"message": "Student data added"}, 201
 
         # update an existing student
         elif request.method == "PUT":
-            student = Mahasiswa.query.get(data["kode"])
+            student = Mahasiswa.query.get(data["nim"])
 
             # check if a student exists
             if not student:
-                return {"message": "Student not found"}, 404
+                return {"message": "Student data not found"}, 404
 
             # override the existing data with the new ones, with current data as default values
-            student.nim = data.get("kode", student.nim)
-            student.nama_mk = data.get("nama", student.nama_mk)
-            student.sks = data.get("sks", student.sks)
+            student.nim = data.get("nim", student.nim)
+            student.nama_mhs = data.get("nama", student.nama_mhs)
+            student.gender_mhs = data.get("jenis_kelamin", student.gender_mhs)
+            student.email_mhs = data.get("email", student.email_mhs)
+            student.telp_mhs = data.get("nomor_telepon", student.telp_mhs)
             db.session.commit()
-            return {"message": "Student updated"}
+            return {"message": "Student data updated"}
+    return {"message": "Unauthorized access"}, 401
 
 
 # Dosen/Lecturers
@@ -273,6 +305,7 @@ def get_lecturers():
                 "jenis_kelamin": dosen.gender_dosen,
                 "nomor_telepon": dosen.telp_dosen,
                 "email": dosen.email_dosen,
+                # "list_kelas": (dosen.list_kelas)
             }
             for dosen in Dosen.query.all()
         ]
@@ -288,8 +321,8 @@ def get_schedules():
         {
             "kode_kelas": kelas.kode_kelas,
             "ruang": kelas.nama_kelas,
-            "dosen": kelas.nip,
-            "mata_kuliah": kelas.kode_mk,
+            "dosen": kelas.dosen.nama_dosen,
+            "mata_kuliah": kelas.mata_kuliah.nama_mk,
             "hari": kelas.hari,
             "jam": kelas.jam.strftime("%H:%M:%S"),
         }
