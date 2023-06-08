@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 import os
+from flask_migrate import Migrate
 
 # FLASK AND POSTGRESQL CONFIGURATIONS
 # load environment variables (username and password of postgreSQL account)
@@ -14,23 +15,26 @@ app = Flask(__name__)
 app.config[
     "SQLALCHEMY_DATABASE_URI"
 ] = f"postgresql://{username}:{password}@localhost:5432/sia"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = True
 db = SQLAlchemy(app)
+
+migrate = Migrate(app, db)
 
 
 # SCHEMAS
-# create table Mata_Kuliah
+# table Mata_Kuliah
 class Mata_Kuliah(db.Model):
     __tablename__ = "mata_kuliah"
     kode_mk = db.Column(db.String, primary_key=True, nullable=False, unique=True)
     nama_mk = db.Column(db.String, nullable=False)
     sks = db.Column(db.Integer, nullable=False)
-    # list_kelas = db.relationship("kelas")
+    # list_kelas = db.relationship("kelas", backref="mata_kuliah", lazy=True)
 
     def __repr__(self):
         return f"Matkul <{self.nama_mk}>"
 
 
-# create table Mahasiswa
+# table Mahasiswa
 class Mahasiswa(db.Model):
     __tablename__ = "mahasiswa"
     nim = db.Column(db.String, primary_key=True, nullable=False, unique=True)
@@ -43,7 +47,7 @@ class Mahasiswa(db.Model):
         return f"<Matkul {self.nama_mhs}>"
 
 
-# create table Dosen
+# table Dosen
 class Dosen(db.Model):
     __tablename__ = "dosen"
     nip = db.Column(db.String, primary_key=True, nullable=False, unique=True)
@@ -51,13 +55,13 @@ class Dosen(db.Model):
     gender_dosen = db.Column(db.String, nullable=False)
     telp_dosen = db.Column(db.String, nullable=False, unique=True)
     email_dosen = db.Column(db.String, nullable=False, unique=True)
-    # list_kelas = db.relationship("kelas")
+    # list_kelas = db.relationship("kelas", backref="dosen", lazy=True)
 
     def __repr__(self):
         return f"<Matkul {self.nama_dosen}>"
 
 
-# create table Kelas
+# table Kelas
 class Kelas(db.Model):
     __tablename__ = "kelas"
     kode_kelas = db.Column(
@@ -73,6 +77,30 @@ class Kelas(db.Model):
         return f"<Kelas {self.kode_kelas}>"
 
 
+# table Kelas Ampu
+class Kelas_Ampu(db.Model):
+    __tablename__ = "kelas_ampu"
+    kode_kelas = db.Column(
+        db.Integer, db.ForeignKey("kelas.kode_kelas"), primary_key=True, nullable=False
+    )
+    nim = db.Column(
+        db.String, db.ForeignKey("mahasiswa.nim"), primary_key=True, nullable=False
+    )
+
+    def __repr__(self):
+        return f"<Kelas Ampu {self.kode_kelas}>"
+
+# AUTH
+def login():
+    id = request.authorization.get("username")
+    mahasiswa = Mahasiswa.query.get(id)
+    dosen = Dosen.query.get(id)
+    if mahasiswa:
+        return "mahasiswa"
+    elif dosen:
+        return "dosen"
+
+
 # ROUTES
 # Mata_Kuliah/Courses
 # retrieve details of all courses
@@ -85,7 +113,7 @@ def get_courses():
     return jsonify(res)
 
 
-# retrieve a specific course details or delete a course
+# get course and delete course
 @app.route("/course/<code>", methods=["GET", "DELETE"])
 def get_delete_course(code):
     course = Mata_Kuliah.query.filter_by(kode_mk=code).first()
@@ -106,7 +134,7 @@ def get_delete_course(code):
         return {"message": "Course deleted"}
 
 
-# add a new course or delete an existing course
+# add course and update course
 @app.route("/course", methods=["POST", "PUT"])
 def add_update_course():
     data = request.get_json()
@@ -147,37 +175,109 @@ def add_update_course():
 
 
 # Mahasiswa/Students
-# retrieve details of all students
+# get all students
 @app.get("/students")
 def get_students():
-    res = [
-        {
-            "nim": mahasiswa.nim,
-            "nama": mahasiswa.nama_mhs,
-            "jenis_kelamin": mahasiswa.gender_mhs,
-            "nomor_telepon": mahasiswa.telp_mhs,
-            "email": mahasiswa.email_mhs,
-        }
-        for mahasiswa in Mahasiswa.query.all()
-    ]
-    return jsonify(res)
+    if login() == "mahasiswa":
+        res = [
+            {
+                "nim": mahasiswa.nim,
+                "nama": mahasiswa.nama_mhs,
+                "jenis_kelamin": mahasiswa.gender_mhs,
+                "nomor_telepon": mahasiswa.telp_mhs,
+                "email": mahasiswa.email_mhs,
+            }
+            for mahasiswa in Mahasiswa.query.all()
+        ]
+        return jsonify(res)
+    return {"message": "Unauthorized access"}, 401
+
+
+# get student and delete student
+@app.route("/student/<code>", methods=["GET", "DELETE"])
+def get_delete_student(code):
+    if login() == "mahasiswa":
+        student = Mahasiswa.query.filter_by(nim=code).first()
+
+        # check if a specific student exists
+        if not student:
+            return {"message": "Student not found"}, 404
+
+        # retrieve that specific student
+        if request.method == "GET":
+            res = {
+                "kode": student.nim,
+                "mata_kuliah": student.nama_mk,
+                "sks": student.sks,
+            }
+            return jsonify(res)
+
+        # delete that specific student
+        elif request.method == "DELETE":
+            db.session.delete(student)
+            db.session.commit()
+            return {"message": "Student deleted"}
+    return {"message": "Unauthorized access"}, 401
+
+
+# add student and update student
+@app.route("/student", methods=["POST", "PUT"])
+def add_update_student():
+    if login() == "mahasiswa":
+        data = request.get_json()
+
+        # add a new student
+        if request.method == "POST":
+            # check the field data
+            if any([not "kode" in data, not "nama" in data, not "sks" in data]):
+                return {"error": "Bad Request: Missing field(s)"}, 400
+
+            # check if a student already exists
+            student = Mahasiswa.query.filter_by(nim=data["kode"]).first()
+            if student:
+                return {"error": "Student already exists"}, 400
+
+            # create a new instance of Mata Kuliah
+            new_student = Mahasiswa(
+                nim=data["kode"], nama_mk=data["nama"], sks=data["sks"]
+            )
+            db.session.add(new_student)
+            db.session.commit()
+            return {"message": "Student added"}, 201
+
+        # update an existing student
+        elif request.method == "PUT":
+            student = Mahasiswa.query.get(data["kode"])
+
+            # check if a student exists
+            if not student:
+                return {"message": "Student not found"}, 404
+
+            # override the existing data with the new ones, with current data as default values
+            student.nim = data.get("kode", student.nim)
+            student.nama_mk = data.get("nama", student.nama_mk)
+            student.sks = data.get("sks", student.sks)
+            db.session.commit()
+            return {"message": "Student updated"}
 
 
 # Dosen/Lecturers
 # retrieve all lecturers
 @app.get("/lecturers")
 def get_lecturers():
-    res = [
-        {
-            "nip": dosen.nip,
-            "nama": dosen.nama_dosen,
-            "jenis_kelamin": dosen.gender_dosen,
-            "nomor_telepon": dosen.telp_dosen,
-            "email": dosen.email_dosen,
-        }
-        for dosen in Dosen.query.all()
-    ]
-    return jsonify(res)
+    if login() == "dosen":
+        res = [
+            {
+                "nip": dosen.nip,
+                "nama": dosen.nama_dosen,
+                "jenis_kelamin": dosen.gender_dosen,
+                "nomor_telepon": dosen.telp_dosen,
+                "email": dosen.email_dosen,
+            }
+            for dosen in Dosen.query.all()
+        ]
+        return jsonify(res)
+    return {"message": "Unauthorized access"}, 401
 
 
 # Kelas/Schedules
@@ -217,7 +317,9 @@ def create_delete_schedule():
             return {"error": "Bad Request: Missing field(s)"}, 400
 
         # check if time and place occupied
-        exist_schedule = Kelas.query.filter_by(hari=data["hari"], jam=data["jam"], nama_kelas=data["ruang"]).first()
+        exist_schedule = Kelas.query.filter_by(
+            hari=data["hari"], jam=data["jam"], nama_kelas=data["ruang"]
+        ).first()
         if exist_schedule:
             return {"error": "Bad Request: Time and place already occupied"}, 400
 
@@ -231,7 +333,7 @@ def create_delete_schedule():
         db.session.add(new_schedule)
         db.session.commit()
         return {"message": "Schedule created"}, 201
-    
+
     # update an existing schedule
     elif request.method == "PUT":
         schedule = Kelas.query.get(data["kode_kelas"])
@@ -241,7 +343,9 @@ def create_delete_schedule():
             return {"message": "Schedule not found"}, 404
 
         # check if time and place occupied
-        exist_schedule = Kelas.query.filter_by(hari=data["hari"], jam=data["jam"], nama_kelas=data["ruang"]).first()
+        exist_schedule = Kelas.query.filter_by(
+            hari=data["hari"], jam=data["jam"], nama_kelas=data["ruang"]
+        ).first()
         if exist_schedule:
             return {"error": "Bad Request: Time and place already occupied"}, 400
 
