@@ -262,7 +262,7 @@ def add_update_student():
             if data["jenis_kelamin"] not in ("L", "P"):
                 return {"error": "Invalid gender type"}, 400
 
-            # create a new instance of Mata Kuliah
+            # create a new instance of Mahasiswa
             new_student = Mahasiswa(
                 nim=data["nim"],
                 nama_mhs=data["nama"],
@@ -310,6 +310,104 @@ def get_lecturers():
             for dosen in Dosen.query.all()
         ]
         return jsonify(res)
+    return {"message": "Unauthorized access"}, 401
+
+# get lecturer and delete lecturer
+@app.route("/lecturer/<code>", methods=["GET", "DELETE"])
+def get_delete_lecturer(code):
+    if login() == "dosen":
+        lecturer = Dosen.query.filter_by(nip=code).first()
+
+        # check if a specific lecturer exists
+        if not lecturer:
+            return {"message": "Lecturer data not found"}, 404
+
+        # retrieve that specific lecturer
+        if request.method == "GET":
+            res = {
+                "nip": lecturer.nip,
+                "nama": lecturer.nama_dosen,
+                "jenis_kelamin": lecturer.gender_dosen,
+                "nomor_telepon": lecturer.telp_dosen,
+                "email": lecturer.email_dosen,
+            }
+            return jsonify(res)
+
+        # delete that specific lecturer
+        elif request.method == "DELETE":
+            db.session.delete(lecturer)
+            db.session.commit()
+            return {"message": "Lecturer data deleted"}
+    return {"message": "Unauthorized access"}, 401
+
+
+# add lecturer and update lecturer
+@app.route("/lecturer", methods=["POST", "PUT"])
+def add_update_lecturer():
+    if login() == "dosen":
+        data = request.get_json()
+
+        # add a new lecturer
+        if request.method == "POST":
+            # check if any data field is empty
+            if any(
+                [
+                    not "nip" in data,
+                    not "nama" in data,
+                    not "jenis_kelamin" in data,
+                    not "nomor_telepon" in data,
+                    not "email" in data,
+                ]
+            ):
+                return {"error": "Bad Request: Missing field(s)"}, 400
+
+            # check if a lecturer already exists
+            res1 = Dosen.query.filter_by(nip=data["nip"]).first()
+            if res1:
+                return {"error": f"Lecturer with nip {res1.nip} already exists"}, 400
+
+            # check unique phone number
+            res2 = Dosen.query.filter_by(telp_dosen=data["nomor_telepon"]).first()
+            if res2:
+                return {"error": f"Lecturer with telp {res2.telp_dosen} already exists"}, 400
+
+            # check unique email
+            res3 = Dosen.query.filter_by(email_dosen=data["email"]).first()
+            if res3:
+                return {"error": f"Lecturer with email {res3.email_dosen} already exists"}, 400
+
+            # check gender
+            if data["jenis_kelamin"] not in ("L", "P"):
+                return {"error": "Invalid gender type"}, 400
+
+            # create a new instance of Mata Kuliah
+            new_lecturer = Dosen(
+                nip=data["nip"],
+                nama_dosen=data["nama"],
+                gender_dosen=data["jenis_kelamin"],
+                telp_dosen=data["nomor_telepon"],
+                email_dosen=data["email"],
+            )
+            db.session.add(new_lecturer)
+            db.session.commit()
+            return {"message": "Lecturer data added"}, 201
+
+        # update an existing lecturer
+        elif request.method == "PUT":
+            lecturer = Dosen.query.get(data["nip"])
+
+            # check if a lecturer exists
+            if not lecturer:
+                return {"message": "Lecturer data not found"}, 404
+
+            # override the existing data with the new ones, with current data as default values
+            lecturer.nip = data.get("nip", lecturer.nip)
+            lecturer.nama_dosen = data.get("nama", lecturer.nama_dosen)
+            lecturer.gender_dosen = data.get("jenis_kelamin", lecturer.gender_dosen)
+            lecturer.email_dosen = data.get("email", lecturer.email_dosen)
+            lecturer.telp_dosen = data.get("nomor_telepon", lecturer.telp_dosen)
+            db.session.commit()
+            return {"message": "Lecturer data updated"}
     return {"message": "Unauthorized access"}, 401
 
 
