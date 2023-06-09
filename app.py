@@ -422,16 +422,39 @@ def get_schedules():
             "dosen": kelas.dosen.nama_dosen,
             "mata_kuliah": kelas.mata_kuliah.nama_mk,
             "hari": kelas.hari,
-            "jam": kelas.jam.strftime("%H:%M:%S"),
+            "jam": kelas.jam.strftime("%H:%M")
         }
         for kelas in Kelas.query.all()
     ]
     return jsonify(res)
 
 
+@app.route("/schedule/<int:code>", methods=["GET","DELETE"])
+def get_delete_schedule(code):
+    schedule = Kelas.query.get(code)
+
+    # check if a specific schedule exists
+    if not schedule:
+            return {"message": "Schedule not found"}, 404
+    
+    if request.method == "GET":
+        res = {
+                "kode_kelas": schedule.kode_kelas,
+                "ruang": schedule.nama_kelas,
+                "dosen": schedule.dosen.nama_dosen,
+                "mata_kuliah": schedule.mata_kuliah.nama_mk,
+                "hari": schedule.hari,
+                "jam": schedule.jam.strftime("%H:%M")
+            }
+        return jsonify(res)
+    elif request.method == "DELETE":
+        db.session.delete(schedule)
+        db.session.commit()
+        return {"message": "Schedule deleted"}
+
 # create a new schedule or update an existing schedule
 @app.route("/schedule", methods=["POST", "PUT"])
-def create_delete_schedule():
+def create_update_schedule():
     data = request.get_json()
 
     # create a new schedule
@@ -439,8 +462,8 @@ def create_delete_schedule():
         if any(
             [
                 not "ruang" in data,
-                not "dosen" in data,
-                not "mata_kuliah" in data,
+                not "nip" in data,
+                not "kode_mk" in data,
                 not "hari" in data,
                 not "jam" in data,
             ]
@@ -456,8 +479,8 @@ def create_delete_schedule():
 
         new_schedule = Kelas(
             nama_kelas=data["ruang"],
-            nip=data["dosen"],
-            kode_mk=data["mata_kuliah"],
+            nip=data["nip"],
+            kode_mk=data["kode_mk"],
             hari=data["hari"],
             jam=data["jam"],
         )
@@ -481,8 +504,8 @@ def create_delete_schedule():
             return {"error": "Bad Request: Time and place already occupied"}, 400
 
         # override the existing data with the new ones, with current data as default values
-        schedule.nip = data.get("dosen", schedule.nip)
-        schedule.kode_mk = data.get("mata_kuliah", schedule.kode_mk)
+        schedule.nip = data.get("nip", schedule.nip)
+        schedule.kode_mk = data.get("kode_mk", schedule.kode_mk)
         schedule.hari = data.get("hari", schedule.hari)
         schedule.jam = data.get("jam", schedule.jam)
         db.session.commit()
