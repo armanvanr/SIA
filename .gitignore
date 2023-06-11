@@ -1,2 +1,4 @@
 .env
 siaenv/
+add_kelas_ampu.py
+__pycache__/

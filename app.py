@@ -42,9 +42,10 @@ class Mahasiswa(db.Model):
     gender_mhs = db.Column(db.String, nullable=False)
     telp_mhs = db.Column(db.String, nullable=False, unique=True)
     email_mhs = db.Column(db.String, nullable=False, unique=True)
+    list_kuliah = db.relationship("Kelas_Ampu", backref="mahasiswa", lazy="dynamic")
 
     def __repr__(self):
-        return f"<Matkul {self.nama_mhs}>"
+        return f"<Mahasiswa {self.nama_mhs}>"
 
 
 # table Dosen
@@ -72,6 +73,7 @@ class Kelas(db.Model):
     kode_mk = db.Column(db.String, db.ForeignKey("mata_kuliah.kode_mk"), nullable=False)
     hari = db.Column(db.String, nullable=False)
     jam = db.Column(db.Time, nullable=False)
+    list_mahasiswa = db.relationship("Kelas_Ampu", backref="kelas", lazy="dynamic")
 
     def __repr__(self):
         return f"<Kelas {self.kode_kelas}>"
@@ -251,12 +253,16 @@ def add_update_student():
             # check unique phone number
             res2 = Mahasiswa.query.filter_by(telp_mhs=data["nomor_telepon"]).first()
             if res2:
-                return {"error": f"Student with telp {res2.telp_mhs} already exists"}, 400
+                return {
+                    "error": f"Student with telp {res2.telp_mhs} already exists"
+                }, 400
 
             # check unique email
             res3 = Mahasiswa.query.filter_by(email_mhs=data["email"]).first()
             if res3:
-                return {"error": f"Student with email {res3.email_mhs} already exists"}, 400
+                return {
+                    "error": f"Student with email {res3.email_mhs} already exists"
+                }, 400
 
             # check gender
             if data["jenis_kelamin"] not in ("L", "P"):
@@ -311,6 +317,7 @@ def get_lecturers():
         ]
         return jsonify(res)
     return {"message": "Unauthorized access"}, 401
+
 
 # get lecturer and delete lecturer
 @app.route("/lecturer/<code>", methods=["GET", "DELETE"])
@@ -369,12 +376,16 @@ def add_update_lecturer():
             # check unique phone number
             res2 = Dosen.query.filter_by(telp_dosen=data["nomor_telepon"]).first()
             if res2:
-                return {"error": f"Lecturer with telp {res2.telp_dosen} already exists"}, 400
+                return {
+                    "error": f"Lecturer with telp {res2.telp_dosen} already exists"
+                }, 400
 
             # check unique email
             res3 = Dosen.query.filter_by(email_dosen=data["email"]).first()
             if res3:
-                return {"error": f"Lecturer with email {res3.email_dosen} already exists"}, 400
+                return {
+                    "error": f"Lecturer with email {res3.email_dosen} already exists"
+                }, 400
 
             # check gender
             if data["jenis_kelamin"] not in ("L", "P"):
@@ -422,35 +433,38 @@ def get_schedules():
             "dosen": kelas.dosen.nama_dosen,
             "mata_kuliah": kelas.mata_kuliah.nama_mk,
             "hari": kelas.hari,
-            "jam": kelas.jam.strftime("%H:%M")
+            "jam": kelas.jam.strftime("%H:%M"),
+            "list_mahasiswa": [ampu.mahasiswa.nama_mhs for ampu in kelas.list_mahasiswa.all()],
         }
         for kelas in Kelas.query.all()
     ]
     return jsonify(res)
 
 
-@app.route("/schedule/<int:code>", methods=["GET","DELETE"])
+@app.route("/schedule/<int:code>", methods=["GET", "DELETE"])
 def get_delete_schedule(code):
     schedule = Kelas.query.get(code)
 
     # check if a specific schedule exists
     if not schedule:
-            return {"message": "Schedule not found"}, 404
-    
+        return {"message": "Schedule not found"}, 404
+
     if request.method == "GET":
         res = {
-                "kode_kelas": schedule.kode_kelas,
-                "ruang": schedule.nama_kelas,
-                "dosen": schedule.dosen.nama_dosen,
-                "mata_kuliah": schedule.mata_kuliah.nama_mk,
-                "hari": schedule.hari,
-                "jam": schedule.jam.strftime("%H:%M")
-            }
+            "kode_kelas": schedule.kode_kelas,
+            "ruang": schedule.nama_kelas,
+            "dosen": schedule.dosen.nama_dosen,
+            "mata_kuliah": schedule.mata_kuliah.nama_mk,
+            "hari": schedule.hari,
+            "jam": schedule.jam.strftime("%H:%M"),
+            "list_mahasiswa": [ampu.mahasiswa.nama_mhs for ampu in schedule.list_mahasiswa.all()],
+        }
         return jsonify(res)
     elif request.method == "DELETE":
         db.session.delete(schedule)
         db.session.commit()
         return {"message": "Schedule deleted"}
+
 
 # create a new schedule or update an existing schedule
 @app.route("/schedule", methods=["POST", "PUT"])
@@ -510,6 +524,43 @@ def create_update_schedule():
         schedule.jam = data.get("jam", schedule.jam)
         db.session.commit()
         return {"message": "Schedule updated"}
+
+
+@app.get("/registry")
+def get_reg():
+    result = [
+        {
+            "jadwal": {
+                "ruang": ampu.kelas.nama_kelas,
+                "mata_kuliah": ampu.kelas.mata_kuliah.nama_mk,
+                "hari": ampu.kelas.hari,
+                "jam": ampu.kelas.jam.strftime("%H:%M"),
+                "dosen": ampu.kelas.dosen.nama_dosen,
+            },
+            "mahasiswa": {"nama": ampu.mahasiswa.nama_mhs, "nim": ampu.mahasiswa.nim},
+        }
+        for ampu in Kelas_Ampu.query.all()
+    ]
+    return result
+
+
+@app.route("/registry", methods=["POST", "PUT"])
+def create_registry():
+    data = request.get_json()
+    if request.method == "POST":
+        if not "kode_kelas" in data or not "nim" in data:
+            return {"error": "Bad Request: Missing field(s)"}, 400
+        registry = Kelas_Ampu(kode_kelas=data["kode_kelas"], nim=data["nim"])
+        db.session.add(registry)
+        db.session.commit()
+        return {"message": "Course enrolled"}
+
+    elif request.method == "PUT":
+        reg = Kelas_Ampu.query.filter_by(nim=data["nim"], kode_kelas=data["kode_kelas"])
+        reg.kode_kelas = data.get("kode_kelas", reg.kode_kelas)
+        reg.nim = data.get("nim", reg.nim)
+        print(reg.nim, reg.kode_kelas)
+        return {"message": "Enrolled course updated"}
 
 
 if __name__ == "__main__":
