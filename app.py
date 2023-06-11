@@ -434,7 +434,9 @@ def get_schedules():
             "mata_kuliah": kelas.mata_kuliah.nama_mk,
             "hari": kelas.hari,
             "jam": kelas.jam.strftime("%H:%M"),
-            "list_mahasiswa": [ampu.mahasiswa.nama_mhs for ampu in kelas.list_mahasiswa.all()],
+            "list_mahasiswa": [
+                ampu.mahasiswa.nama_mhs for ampu in kelas.list_mahasiswa.all()
+            ],
         }
         for kelas in Kelas.query.all()
     ]
@@ -457,7 +459,9 @@ def get_delete_schedule(code):
             "mata_kuliah": schedule.mata_kuliah.nama_mk,
             "hari": schedule.hari,
             "jam": schedule.jam.strftime("%H:%M"),
-            "list_mahasiswa": [ampu.mahasiswa.nama_mhs for ampu in schedule.list_mahasiswa.all()],
+            "list_mahasiswa": [
+                ampu.mahasiswa.nama_mhs for ampu in schedule.list_mahasiswa.all()
+            ],
         }
         return jsonify(res)
     elif request.method == "DELETE":
@@ -526,7 +530,7 @@ def create_update_schedule():
         return {"message": "Schedule updated"}
 
 
-@app.get("/registry")
+@app.get("/regs")
 def get_reg():
     result = [
         {
@@ -545,22 +549,52 @@ def get_reg():
 
 
 @app.route("/registry", methods=["POST", "PUT"])
-def create_registry():
+def create_update_registry():
     data = request.get_json()
     if request.method == "POST":
         if not "kode_kelas" in data or not "nim" in data:
             return {"error": "Bad Request: Missing field(s)"}, 400
+        ampu = Kelas_Ampu.query.filter_by(nim=data["nim"], kode_kelas=data["kode_kelas"]).first()
+        
+        if ampu:
+            # return {"message": "Bad request"}, 400
+            return {"message": "You are already enrolled the course"}, 400
+        
         registry = Kelas_Ampu(kode_kelas=data["kode_kelas"], nim=data["nim"])
         db.session.add(registry)
         db.session.commit()
         return {"message": "Course enrolled"}
 
     elif request.method == "PUT":
-        reg = Kelas_Ampu.query.filter_by(nim=data["nim"], kode_kelas=data["kode_kelas"])
+        reg = Kelas_Ampu.query.filter_by(nim=data["nim"], kode_kelas=data["kode_kelas"]).first()
         reg.kode_kelas = data.get("kode_kelas", reg.kode_kelas)
         reg.nim = data.get("nim", reg.nim)
-        print(reg.nim, reg.kode_kelas)
         return {"message": "Enrolled course updated"}
+
+
+@app.route("/registry", methods=["GET", "DELETE"])
+def get_delete_registry():
+    kode_kelas = request.args["kode_kelas"]
+    nim = request.args["nim"]
+    ampu = Kelas_Ampu.query.filter_by(kode_kelas=kode_kelas, nim=nim).first()
+    if not ampu:
+        return {"message": "Data not found"}, 404
+    
+    if request.method == "GET":
+        return {
+            "jadwal": {
+                "ruang": ampu.kelas.nama_kelas,
+                "mata_kuliah": ampu.kelas.mata_kuliah.nama_mk,
+                "hari": ampu.kelas.hari,
+                "jam": ampu.kelas.jam.strftime("%H:%M"),
+                "dosen": ampu.kelas.dosen.nama_dosen,
+            },
+            "mahasiswa": {"nama": ampu.mahasiswa.nama_mhs, "nim": ampu.mahasiswa.nim},
+        }
+    elif request.method == "DELETE":
+        db.session.delete(ampu)
+        db.session.commit()
+        return {"message":"Course canceled"}
 
 
 if __name__ == "__main__":
