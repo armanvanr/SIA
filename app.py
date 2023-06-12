@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 from dotenv import load_dotenv
 import os
 from flask_migrate import Migrate
@@ -554,19 +555,23 @@ def create_update_registry():
     if request.method == "POST":
         if not "kode_kelas" in data or not "nim" in data:
             return {"error": "Bad Request: Missing field(s)"}, 400
-        ampu = Kelas_Ampu.query.filter_by(nim=data["nim"], kode_kelas=data["kode_kelas"]).first()
-        
+        ampu = Kelas_Ampu.query.filter_by(
+            nim=data["nim"], kode_kelas=data["kode_kelas"]
+        ).first()
+
         if ampu:
             # return {"message": "Bad request"}, 400
             return {"message": "You are already enrolled the course"}, 400
-        
+
         registry = Kelas_Ampu(kode_kelas=data["kode_kelas"], nim=data["nim"])
         db.session.add(registry)
         db.session.commit()
         return {"message": "Course enrolled"}
 
     elif request.method == "PUT":
-        reg = Kelas_Ampu.query.filter_by(nim=data["nim"], kode_kelas=data["kode_kelas"]).first()
+        reg = Kelas_Ampu.query.filter_by(
+            nim=data["nim"], kode_kelas=data["kode_kelas"]
+        ).first()
         reg.kode_kelas = data.get("kode_kelas", reg.kode_kelas)
         reg.nim = data.get("nim", reg.nim)
         return {"message": "Enrolled course updated"}
@@ -579,7 +584,7 @@ def get_delete_registry():
     ampu = Kelas_Ampu.query.filter_by(kode_kelas=kode_kelas, nim=nim).first()
     if not ampu:
         return {"message": "Data not found"}, 404
-    
+
     if request.method == "GET":
         return {
             "jadwal": {
@@ -594,7 +599,53 @@ def get_delete_registry():
     elif request.method == "DELETE":
         db.session.delete(ampu)
         db.session.commit()
-        return {"message":"Course canceled"}
+        return {"message": "Course canceled"}
+
+
+# query_keys = ["nim", "mahasiswa", "dosen", "hari", "jam", "mata_kuliah", "ruang"]
+
+
+@app.get("/searchregistry")
+def search_registry():
+    # value_list = [{key: request.args.get(key)} for key in query_keys]
+    # results = Kelas_Ampu.query.filter_by(nim=query_params["nim"])
+
+    query_params = request.args.to_dict()
+    base_q = f"""SELECT kelas.nama_kelas, mata_kuliah.nama_mk, kelas.hari,
+                kelas.jam, dosen.nama_dosen, mahasiswa.nim, mahasiswa.nama_mhs
+                FROM kelas_ampu
+                JOIN mahasiswa USING(nim) JOIN kelas USING(kode_kelas)
+                JOIN dosen USING(nip) JOIN mata_kuliah USING(kode_mk)"""
+    
+    if any(["nim" in query_params, "dosen" in query_params, "mata_kuliah" in query_params, "hari" in query_params]):
+        base_q += "WHERE "
+        if "nim" in query_params:
+            base_q += f"nim ILIKE '%{query_params['nim']}%' "
+        if "dosen" in query_params:
+            base_q += f"AND dosen.nama_dosen ILIKE '%{query_params['dosen']}%' "
+        if "mata_kuliah" in query_params:
+            base_q += f"AND mata_kuliah.nama_mk ILIKE '%{query_params['mata_kuliah']}%' "
+        if "hari" in query_params:
+            base_q += f"AND kelas.hari ILIKE '%{query_params['hari']}%' "
+    order = "ORDER BY nim, hari DESC, jam"
+    query = text(base_q + order)
+    results = db.session.execute(query)
+    list_ampu = []
+    for row in results:
+        ruang, mata_kuliah, hari, jam, dosen, nim, mahasiswa = row
+        ampu = {
+            "jadwal": {
+                "ruang": ruang,
+                "mata_kuliah": mata_kuliah,
+                "hari": hari,
+                "jam": jam.strftime("%H:%M"),
+                "dosen": dosen,
+            },
+            "mahasiswa": {"nama": mahasiswa, "nim": nim},
+        }
+        list_ampu.append(ampu)
+
+    return {"search results": list_ampu}
 
 
 if __name__ == "__main__":
